@@ -1,0 +1,10 @@
+/target
+*.exe
+*.exe~
+*.pdb
+*.user
+*.suo
+*.log
+.DS_Store
+debug/
+release/

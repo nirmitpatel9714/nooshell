@@ -1,0 +1,12 @@
+{
+  "py": {
+    "cmd": "python",
+    "args": ["-i"],
+    "mode": "repl"
+  },
+  "js": {
+    "cmd": "node",
+    "args": ["-i"],
+    "mode": "repl"
+  }
+}
