@@ -71,9 +71,31 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     if args.iter().any(|a| a == "nbmode") {
         let mut app = App::with_noorc(config, noorc.language.as_deref(), noorc.aliases.clone());
-        for cmd in &startup {
-            app.current_pane_mut().input_buffer = cmd.clone();
-            app.current_pane_mut().handle_input().await;
+
+        let autosave_exists = store::list_sessions().iter().any(|s| s.id == "_autosave");
+        let mut restored = false;
+        if autosave_exists {
+            print!("Autosaved session found. Restore? [Y/n]: ");
+            io::stdout().flush()?;
+            let mut answer = String::new();
+            io::stdin().read_line(&mut answer)?;
+            if !answer.trim().eq_ignore_ascii_case("n") {
+                restored = app.restore_from_autosave();
+                if restored {
+                    println!("Session restored.");
+                } else {
+                    println!("Could not restore session.");
+                }
+            } else {
+                println!("Starting fresh session.");
+            }
+        }
+
+        if !restored {
+            for cmd in &startup {
+                app.current_pane_mut().input_buffer = cmd.clone();
+                app.current_pane_mut().handle_input().await;
+            }
         }
         run_tui(&mut app).await?;
     } else if args.iter().any(|a| a == "clearc") {
@@ -260,17 +282,20 @@ async fn run_cli(app: &mut App, startup: &[String]) -> Result<(), Box<dyn Error>
             app.current_pane_mut().input_buffer = cmd.clone();
             app.current_pane_mut().handle_input().await;
             app.record_command(&target_lang, &cmd, &[]);
+            app.auto_save();
             continue;
         }
 
         app.current_pane_mut().input_buffer = input.clone();
         if let Some(cmd) = app.current_pane_mut().handle_input().await {
             if cmd == "exit" {
+                app.auto_save();
                 break;
             }
         }
 
         app.record_command(&lang, &input, &[]);
+        app.auto_save();
     }
 
     Ok(())
@@ -286,7 +311,7 @@ fn readline_with_history(prefix: &str, prompt: &str) -> io::Result<String> {
     let entries: Vec<String> = history.commands.iter().map(|c| c.command.clone()).collect();
     let mut hist_idx = entries.len();
 
-    write!(stdout, "{}{}", prefix, prompt)?;
+    write!(stdout, "{}\r{}", prefix, prompt)?;
     stdout.flush()?;
 
     loop {
@@ -346,7 +371,10 @@ fn readline_with_history(prefix: &str, prompt: &str) -> io::Result<String> {
                         _ => {}
                     }
                     let (before, after) = input.split_at(cursor_pos);
-                    write!(stdout, "\r\x1b[2K{}{}\x1b[7m \x1b[27m{}", prompt, before, after)?;
+                    write!(stdout, "\r\x1b[2K{}{}{}", prompt, before, after)?;
+                    if after.len() > 0 {
+                        write!(stdout, "\x1b[{}D", after.len())?;
+                    }
                     stdout.flush()?;
                 }
             }
@@ -392,6 +420,7 @@ where
 {
     loop {
         app.poll_all_panes();
+        app.check_autosave_interval();
 
         terminal.draw(|f| {
             let main_chunks = Layout::default()
@@ -511,13 +540,14 @@ where
                 if key.kind == event::KeyEventKind::Press {
                     match key.code {
                         KeyCode::Esc => {
+                            app.auto_save();
                             app.running = false;
                             return Ok(());
                         }
-                        KeyCode::Left if key.modifiers.contains(KeyModifiers::ALT) => {
+                        KeyCode::Left if key.modifiers == KeyModifiers::ALT || key.modifiers == KeyModifiers::CONTROL | KeyModifiers::ALT => {
                             app.previous_workspace();
                         }
-                        KeyCode::Right if key.modifiers.contains(KeyModifiers::ALT) => {
+                        KeyCode::Right if key.modifiers == KeyModifiers::ALT || key.modifiers == KeyModifiers::CONTROL | KeyModifiers::ALT => {
                             app.next_workspace();
                         }
                         KeyCode::Left => {
@@ -532,13 +562,25 @@ where
                                 pane.cursor_pos += 1;
                             }
                         }
+                        KeyCode::Up if key.modifiers.contains(KeyModifiers::ALT) => {
+                            let ws = app.current_workspace_mut();
+                            if ws.active_pane > 0 {
+                                ws.active_pane -= 1;
+                            }
+                        }
+                        KeyCode::Down if key.modifiers.contains(KeyModifiers::ALT) => {
+                            let ws = app.current_workspace_mut();
+                            if ws.active_pane + 1 < ws.panes.len() {
+                                ws.active_pane += 1;
+                            }
+                        }
                         KeyCode::Up if key.modifiers.contains(KeyModifiers::SHIFT) => {
                             app.move_cell_up();
                         }
                         KeyCode::Down if key.modifiers.contains(KeyModifiers::SHIFT) => {
                             app.move_cell_down();
                         }
-                        KeyCode::Up if key.modifiers.contains(KeyModifiers::ALT) => {
+                        KeyCode::Up => {
                             let pane = app.current_pane_mut();
                             if pane.history_index > 0 {
                                 pane.history_index -= 1;
@@ -546,7 +588,7 @@ where
                                 pane.cursor_pos = pane.input_buffer.len();
                             }
                         }
-                        KeyCode::Down if key.modifiers.contains(KeyModifiers::ALT) => {
+                        KeyCode::Down => {
                             let pane = app.current_pane_mut();
                             if pane.history_index + 1 < pane.history.len() {
                                 pane.history_index += 1;
@@ -555,18 +597,6 @@ where
                                 pane.history_index = pane.history.len();
                                 pane.input_buffer.clear();
                                 pane.cursor_pos = 0;
-                            }
-                        }
-                        KeyCode::Up => {
-                            let ws = app.current_workspace_mut();
-                            if ws.active_pane > 0 {
-                                ws.active_pane -= 1;
-                            }
-                        }
-                        KeyCode::Down => {
-                            let ws = app.current_workspace_mut();
-                            if ws.active_pane + 1 < ws.panes.len() {
-                                ws.active_pane += 1;
                             }
                         }
                         KeyCode::Tab => {
@@ -594,6 +624,7 @@ where
                                 app.current_pane_mut().input_buffer = cmd.clone();
                                 app.current_pane_mut().handle_input().await;
                                 app.record_command(&target_lang, &cmd, &[]);
+                                app.auto_save();
                             } else {
                                 let lang = {
                                     let p = app.current_pane_mut();
@@ -610,6 +641,7 @@ where
                                     p.output_lines.clone()
                                 };
                                 app.record_command(&lang, &input, &output);
+                                app.auto_save();
                             }
                         }
                         KeyCode::Backspace => {

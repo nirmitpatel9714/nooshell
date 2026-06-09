@@ -92,6 +92,8 @@ pub struct SavedCell {
     pub history: Vec<String>,
     pub execution_count: usize,
     pub output_lines: Vec<String>,
+    pub input_buffer: String,
+    pub cursor_pos: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

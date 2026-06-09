@@ -3,6 +3,9 @@ use crate::pane::Pane;
 use crate::state::SharedState;
 use crate::store;
 use std::collections::HashMap;
+use std::time::Instant;
+
+const AUTO_SESSION_ID: &str = "_autosave";
 
 pub struct Workspace {
     pub name: String,
@@ -86,6 +89,7 @@ pub struct App {
     pub config: ConfigMap,
     pub running: bool,
     pub state: SharedState,
+    pub last_autosave: Instant,
 }
 
 impl App {
@@ -98,6 +102,7 @@ impl App {
             config,
             running: true,
             state,
+            last_autosave: Instant::now(),
         }
     }
 
@@ -112,6 +117,7 @@ impl App {
             config,
             running: true,
             state,
+            last_autosave: Instant::now(),
         }
     }
 
@@ -189,6 +195,8 @@ impl App {
                 history: p.history.clone(),
                 execution_count: p.execution_count,
                 output_lines: p.output_lines.clone(),
+                input_buffer: p.input_buffer.clone(),
+                cursor_pos: p.cursor_pos,
             }).collect();
             store::SavedWorkspace {
                 name: ws.name.clone(),
@@ -216,5 +224,50 @@ impl App {
     pub fn load_workspaces_from_session(key: &str) -> Option<Vec<store::SavedWorkspace>> {
         let sessions = store::list_sessions();
         sessions.into_iter().find(|s| s.id == key).map(|s| s.workspaces)
+    }
+
+    pub fn auto_save(&mut self) {
+        self.save_session(AUTO_SESSION_ID);
+        self.last_autosave = Instant::now();
+    }
+
+    pub fn check_autosave_interval(&mut self) {
+        if self.last_autosave.elapsed() > std::time::Duration::from_secs(10) {
+            self.auto_save();
+        }
+    }
+
+    pub fn restore_from_autosave(&mut self) -> bool {
+        let saved_workspaces = match Self::load_workspaces_from_session(AUTO_SESSION_ID) {
+            Some(w) => w,
+            None => return false,
+        };
+
+        self.workspaces = saved_workspaces.into_iter().map(|saved_ws| {
+            let panes: Vec<Pane> = saved_ws.cells.iter().enumerate().map(|(i, c)| {
+                let mut pane = Pane::new(i, c.active_language.clone(), self.state.clone());
+                pane.history = c.history.clone();
+                pane.history_index = c.history.len();
+                pane.execution_count = c.execution_count;
+                pane.output_lines = c.output_lines.clone();
+                pane.input_buffer = c.input_buffer.clone();
+                pane.cursor_pos = c.cursor_pos;
+                pane.aliases = self.workspaces.first()
+                    .and_then(|ws| ws.panes.first())
+                    .map(|p| p.aliases.clone())
+                    .unwrap_or_default();
+                let _ = pane.start_session(&self.config);
+                pane
+            }).collect();
+
+            Workspace {
+                name: saved_ws.name.clone(),
+                panes,
+                active_pane: saved_ws.active_pane,
+            }
+        }).collect();
+
+        self.active_workspace = 0;
+        true
     }
 }
