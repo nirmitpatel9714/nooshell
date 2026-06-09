@@ -27,4 +27,18 @@ impl SharedState {
         let store = self.store.lock().unwrap();
         serde_json::to_string(&*store).unwrap_or_else(|_| "{}".to_string())
     }
+
+    pub fn import_json(&self, json_str: &str) {
+        if let Ok(parsed) = serde_json::from_str::<Map<String, Value>>(json_str) {
+            let mut store = self.store.lock().unwrap();
+            for (k, v) in parsed {
+                store.insert(k, v);
+            }
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        let store = self.store.lock().unwrap();
+        store.is_empty()
+    }
 }

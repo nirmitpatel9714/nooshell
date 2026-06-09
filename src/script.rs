@@ -1,3 +1,4 @@
+use crate::bridge;
 use crate::config::ConfigMap;
 use crate::execution::ProcessSession;
 use crate::state::SharedState;
@@ -6,21 +7,31 @@ use std::path::Path;
 use tokio::sync::mpsc;
 
 pub struct NsScript {
-    pub lines: Vec<(String, String)>, // (alias, code)
+    pub lines: Vec<(Option<String>, String)>, // (optional alias, code)
 }
 
 impl NsScript {
-    pub fn load<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+    pub fn load<P: AsRef<Path>>(path: P, config_map: &ConfigMap) -> std::io::Result<Self> {
         let content = fs::read_to_string(path)?;
         let mut lines = Vec::new();
+        let mut last_lang: Option<String> = None;
 
         for line in content.lines() {
             let line = line.trim();
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            if let Some((alias, code)) = line.split_once(' ') {
-                lines.push((alias.trim().to_string(), code.trim().to_string()));
+            if let Some((first, rest)) = line.split_once(' ') {
+                let first = first.trim();
+                if config_map.contains_key(first) {
+                    last_lang = Some(first.to_string());
+                    lines.push((last_lang.clone(), rest.trim().to_string()));
+                    continue;
+                }
+            }
+            // Bare line — inherit language from previous line
+            if let Some(ref lang) = last_lang {
+                lines.push((Some(lang.clone()), line.to_string()));
             }
         }
         Ok(Self { lines })
@@ -33,25 +44,19 @@ impl NsScript {
         output_sender: mpsc::Sender<String>,
     ) {
         for (alias, code) in &self.lines {
-            if let Some(config) = config_map.get(alias) {
+            let alias = match alias {
+                Some(a) => a.clone(),
+                None => continue,
+            };
+            if let Some(config) = config_map.get(&alias) {
                 let (dummy_out, _dummy_rx) = mpsc::channel(100);
                 if let Ok(session) = ProcessSession::start(config, dummy_out) {
-                    // Inject state
-                    let state_json = state.as_json_string();
-                    let state_injection = match alias.as_str() {
-                        "py" => format!("import json; __state = json.loads('{}')", state_json),
-                        "js" => format!("const __state = JSON.parse('{}');", state_json),
-                        _ => String::new(),
-                    };
-
-                    if !state_injection.is_empty() {
-                        session.send_input(&state_injection).await;
+                    if let Some(inj) = bridge::injection_code(state, &alias) {
+                        session.send_input(&inj).await;
                     }
 
-                    // Run the actual code
                     session.send_input(code).await;
                     let _ = output_sender.send(format!("Executed [{}] {}", alias, code)).await;
-                    // In a full implementation, we'd wait for this to finish and capture state updates
                 } else {
                     let _ = output_sender.send(format!("Failed to start process for {}", alias)).await;
                 }

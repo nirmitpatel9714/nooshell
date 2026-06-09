@@ -2,6 +2,7 @@ use crate::config::ConfigMap;
 use crate::pane::Pane;
 use crate::state::SharedState;
 use crate::store;
+use std::collections::HashMap;
 
 pub struct Workspace {
     pub name: String,
@@ -10,8 +11,12 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    pub fn new(name: String, config: &ConfigMap) -> Self {
-        let mut pane = Pane::new(0, "py".to_string());
+    pub fn new(name: String, config: &ConfigMap, state: SharedState) -> Self {
+        Self::with_language(name, config, "py", state)
+    }
+
+    pub fn with_language(name: String, config: &ConfigMap, language: &str, state: SharedState) -> Self {
+        let mut pane = Pane::new(0, language.to_string(), state);
         let _ = pane.start_session(config);
         Self {
             name,
@@ -24,9 +29,9 @@ impl Workspace {
         &mut self.panes[self.active_pane]
     }
 
-    pub fn add_cell(&mut self, config: &ConfigMap) {
+    pub fn add_cell(&mut self, config: &ConfigMap, state: SharedState) {
         let id = self.panes.len();
-        let mut pane = Pane::new(id, "py".to_string());
+        let mut pane = Pane::new(id, "py".to_string(), state);
         let _ = pane.start_session(config);
         let insert_pos = self.active_pane + 1;
         self.panes.insert(insert_pos, pane);
@@ -62,6 +67,17 @@ impl Workspace {
             pane.poll_output();
         }
     }
+
+    pub fn ensure_pane(&mut self, language: &str, config: &ConfigMap, state: SharedState) -> usize {
+        if let Some(pos) = self.panes.iter().position(|p| p.active_language == language) {
+            return pos;
+        }
+        let id = self.panes.len();
+        let mut pane = Pane::new(id, language.to_string(), state);
+        let _ = pane.start_session(config);
+        self.panes.push(pane);
+        self.panes.len() - 1
+    }
 }
 
 pub struct App {
@@ -74,13 +90,28 @@ pub struct App {
 
 impl App {
     pub fn new(config: ConfigMap) -> Self {
-        let workspace = Workspace::new("Workspace 1".to_string(), &config);
+        let state = SharedState::new();
+        let workspace = Workspace::new("Workspace 1".to_string(), &config, state.clone());
         Self {
             workspaces: vec![workspace],
             active_workspace: 0,
             config,
             running: true,
-            state: SharedState::new(),
+            state,
+        }
+    }
+
+    pub fn with_noorc(config: ConfigMap, language: Option<&str>, aliases: HashMap<String, String>) -> Self {
+        let lang = language.unwrap_or("py");
+        let state = SharedState::new();
+        let mut workspace = Workspace::with_language("Workspace 1".to_string(), &config, lang, state.clone());
+        workspace.panes[0].aliases = aliases;
+        Self {
+            workspaces: vec![workspace],
+            active_workspace: 0,
+            config,
+            running: true,
+            state,
         }
     }
 
@@ -94,7 +125,8 @@ impl App {
 
     pub fn add_cell(&mut self) {
         let config = self.config.clone();
-        self.current_workspace_mut().add_cell(&config);
+        let state = self.state.clone();
+        self.current_workspace_mut().add_cell(&config, state);
     }
 
     pub fn remove_cell(&mut self) {
@@ -112,7 +144,8 @@ impl App {
     pub fn add_workspace(&mut self) {
         let name = format!("Workspace {}", self.workspaces.len() + 1);
         let config = self.config.clone();
-        let ws = Workspace::new(name, &config);
+        let state = self.state.clone();
+        let ws = Workspace::new(name, &config, state);
         self.workspaces.push(ws);
         self.active_workspace = self.workspaces.len() - 1;
     }

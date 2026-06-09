@@ -1,6 +1,8 @@
 mod app;
+mod bridge;
 mod config;
 mod execution;
+mod noorc;
 mod pane;
 mod script;
 mod state;
@@ -25,10 +27,54 @@ use crossterm::event::KeyEventKind;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let config = config::load_config("languages.json").unwrap_or_default();
+    let noorc = noorc::Noorc::load();
     let args: Vec<String> = env::args().collect();
 
+    let startup = noorc.startup.clone();
+
+    if let Some(script_path) = args.iter().find(|a| a.ends_with(".ns")) {
+        use crate::script::NsScript;
+        if let Ok(script) = NsScript::load(script_path, &config) {
+            let mut app = App::new(config);
+            for (alias, code) in &script.lines {
+                let lang = alias.as_deref().unwrap_or("py");
+                let state = app.state.clone();
+                let idx;
+                {
+                    let ws = &mut app.workspaces[0];
+                    idx = ws.ensure_pane(lang, &app.config, state);
+                    ws.active_pane = idx;
+                }
+                for _ in 0..5 {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                    app.poll_all_panes();
+                }
+                app.workspaces[0].panes[idx].output_lines.clear();
+                app.workspaces[0].panes[idx].input_buffer = code.clone();
+                app.workspaces[0].panes[idx].handle_input().await;
+                for _ in 0..20 {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                    app.poll_all_panes();
+                    if !app.workspaces[0].panes[idx].output_lines.is_empty() {
+                        break;
+                    }
+                }
+                for line in &app.workspaces[0].panes[idx].output_lines {
+                    if !line.is_empty() {
+                        println!("{}", line);
+                    }
+                }
+            }
+        }
+        return Ok(());
+    }
+
     if args.iter().any(|a| a == "nbmode") {
-        let mut app = App::new(config);
+        let mut app = App::with_noorc(config, noorc.language.as_deref(), noorc.aliases.clone());
+        for cmd in &startup {
+            app.current_pane_mut().input_buffer = cmd.clone();
+            app.current_pane_mut().handle_input().await;
+        }
         run_tui(&mut app).await?;
     } else if args.iter().any(|a| a == "clearc") {
         store::clear_history();
@@ -66,15 +112,40 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut app = App::new(config);
         run_manage_tui(&mut app).await?;
     } else {
-        let mut app = App::new(config);
-        run_cli(&mut app).await?;
+        let mut app = App::with_noorc(config, noorc.language.as_deref(), noorc.aliases);
+        run_cli(&mut app, &startup).await?;
     }
 
     Ok(())
 }
 
-async fn run_cli(app: &mut App) -> Result<(), Box<dyn Error>> {
-    println!("Nooshell CLI mode. Type 'exit' to quit. Use 'noo nbmode' to enter Notebook mode.");
+fn parse_lang_command(input: &str, config: &config::ConfigMap) -> Option<(String, String)> {
+    let trimmed = input.trim();
+    // lang(code) syntax
+    if let Some(close) = trimmed.find(')') {
+        if let Some(open) = trimmed.find('(') {
+            if close > open + 1 {
+                let lang = trimmed[..open].trim();
+                let code = &trimmed[open + 1..close];
+                if config.contains_key(lang) && !code.is_empty() {
+                    return Some((lang.to_string(), code.to_string()));
+                }
+            }
+        }
+    }
+    // lang code syntax
+    let parts: Vec<&str> = trimmed.splitn(2, ' ').collect();
+    if parts.len() == 2 && config.contains_key(parts[0]) {
+        return Some((parts[0].to_string(), parts[1].to_string()));
+    }
+    None
+}
+
+async fn run_cli(app: &mut App, startup: &[String]) -> Result<(), Box<dyn Error>> {
+    for cmd in startup {
+        app.current_pane_mut().input_buffer = cmd.clone();
+        app.current_pane_mut().handle_input().await;
+    }
 
     loop {
         app.poll_all_panes();
@@ -84,7 +155,7 @@ async fn run_cli(app: &mut App) -> Result<(), Box<dyn Error>> {
             for pane in &mut ws.panes {
                 if !pane.output_lines.is_empty() {
                     for line in &pane.output_lines {
-                        println!("\x1b[36m[{}]\x1b[0m: {}", pane.active_language, line);
+                        println!("{}", line);
                     }
                     pane.output_lines.clear();
                 }
@@ -97,13 +168,6 @@ async fn run_cli(app: &mut App) -> Result<(), Box<dyn Error>> {
             let ws = &app.workspaces[app.active_workspace];
             ws.panes[ws.active_pane].active_language.clone()
         };
-
-        eprintln!("[nooshell-debug] history path: {}", store::history_path_str());
-        let hist = store::load_history();
-        eprintln!("[nooshell-debug] history entries on load: {}", hist.commands.len());
-        for c in &hist.commands {
-            eprintln!("[nooshell-debug]   cmd: {}", c.command);
-        }
 
         let prompt = format!("\x1b[32;1m➜ \x1b[36;1m[{}]\x1b[0m \x1b[33m({})\x1b[0m \x1b[35m❯\x1b[0m ", dir_name, lang);
         let input = readline_with_history("\n", &prompt)?;
@@ -188,6 +252,17 @@ async fn run_cli(app: &mut App) -> Result<(), Box<dyn Error>> {
             }
         }
 
+        if let Some((target_lang, cmd)) = parse_lang_command(&input, &app.config) {
+            let state = app.state.clone();
+            let ws = &mut app.workspaces[app.active_workspace];
+            let idx = ws.ensure_pane(&target_lang, &app.config, state);
+            ws.active_pane = idx;
+            app.current_pane_mut().input_buffer = cmd.clone();
+            app.current_pane_mut().handle_input().await;
+            app.record_command(&target_lang, &cmd, &[]);
+            continue;
+        }
+
         app.current_pane_mut().input_buffer = input.clone();
         if let Some(cmd) = app.current_pane_mut().handle_input().await {
             if cmd == "exit" {
@@ -196,8 +271,6 @@ async fn run_cli(app: &mut App) -> Result<(), Box<dyn Error>> {
         }
 
         app.record_command(&lang, &input, &[]);
-        let hist = store::load_history();
-        eprintln!("[nooshell-debug] history entries after record: {}", hist.commands.len());
     }
 
     Ok(())
@@ -208,6 +281,7 @@ fn readline_with_history(prefix: &str, prompt: &str) -> io::Result<String> {
     let mut stdout = io::stdout();
 
     let mut input = String::new();
+    let mut cursor_pos: usize = 0;
     let history = store::load_history();
     let entries: Vec<String> = history.commands.iter().map(|c| c.command.clone()).collect();
     let mut hist_idx = entries.len();
@@ -225,23 +299,39 @@ fn readline_with_history(prefix: &str, prompt: &str) -> io::Result<String> {
                             stdout.flush()?;
                             break;
                         }
+                        KeyCode::Left => {
+                            if cursor_pos > 0 {
+                                cursor_pos -= 1;
+                            }
+                        }
+                        KeyCode::Right => {
+                            if cursor_pos < input.len() {
+                                cursor_pos += 1;
+                            }
+                        }
                         KeyCode::Up => {
                             if hist_idx > 0 {
                                 hist_idx -= 1;
                                 input = entries[hist_idx].clone();
+                                cursor_pos = input.len();
                             }
                         }
                         KeyCode::Down => {
                             if hist_idx + 1 < entries.len() {
                                 hist_idx += 1;
                                 input = entries[hist_idx].clone();
+                                cursor_pos = input.len();
                             } else {
                                 hist_idx = entries.len();
                                 input.clear();
+                                cursor_pos = 0;
                             }
                         }
                         KeyCode::Backspace => {
-                            input.pop();
+                            if cursor_pos > 0 {
+                                input.remove(cursor_pos - 1);
+                                cursor_pos -= 1;
+                            }
                         }
                         KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::CONTROL) && c == 'c' => {
                             writeln!(stdout, "^C")?;
@@ -250,11 +340,13 @@ fn readline_with_history(prefix: &str, prompt: &str) -> io::Result<String> {
                             return Ok(String::new());
                         }
                         KeyCode::Char(c) => {
-                            input.push(c);
+                            input.insert(cursor_pos, c);
+                            cursor_pos += 1;
                         }
                         _ => {}
                     }
-                    write!(stdout, "\r\x1b[2K{}{}", prompt, input)?;
+                    let (before, after) = input.split_at(cursor_pos);
+                    write!(stdout, "\r\x1b[2K{}{}\x1b[7m \x1b[27m{}", prompt, before, after)?;
                     stdout.flush()?;
                 }
             }
@@ -384,13 +476,22 @@ where
                     }
 
                     lines.push(ratatui::text::Line::from(""));
+                    let dir_name = std::env::current_dir()
+                        .ok()
+                        .and_then(|d| d.file_name().map(|n| n.to_string_lossy().to_string()))
+                        .unwrap_or_default();
+                    let (before, after) = pane.input_buffer.split_at(pane.cursor_pos);
                     let prompt_line = ratatui::text::Line::from(vec![
-                        ratatui::text::Span::styled(
-                            format!("In [{}]: ", pane.execution_count + 1),
-                            Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
-                        ),
-                        ratatui::text::Span::raw(&pane.input_buffer),
+                        ratatui::text::Span::styled("➜ ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                        ratatui::text::Span::styled(format!("[{}]", pane.active_language), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                        ratatui::text::Span::styled(format!(" In {{{}}} ", pane.execution_count + 1), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                        ratatui::text::Span::styled(format!("({})", dir_name), Style::default().fg(Color::Yellow)),
+                        ratatui::text::Span::raw(" "),
+                        ratatui::text::Span::styled("❯", Style::default().fg(Color::Magenta)),
+                        ratatui::text::Span::raw(" "),
+                        ratatui::text::Span::raw(before),
                         ratatui::text::Span::styled("█", Style::default().fg(Color::Yellow)),
+                        ratatui::text::Span::raw(after),
                     ]);
                     lines.push(prompt_line);
 
@@ -413,11 +514,23 @@ where
                             app.running = false;
                             return Ok(());
                         }
-                        KeyCode::Left => {
+                        KeyCode::Left if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             app.previous_workspace();
                         }
-                        KeyCode::Right => {
+                        KeyCode::Right if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             app.next_workspace();
+                        }
+                        KeyCode::Left => {
+                            let pane = app.current_pane_mut();
+                            if pane.cursor_pos > 0 {
+                                pane.cursor_pos -= 1;
+                            }
+                        }
+                        KeyCode::Right => {
+                            let pane = app.current_pane_mut();
+                            if pane.cursor_pos < pane.input_buffer.len() {
+                                pane.cursor_pos += 1;
+                            }
                         }
                         KeyCode::Up if key.modifiers.contains(KeyModifiers::SHIFT) => {
                             app.move_cell_up();
@@ -430,6 +543,7 @@ where
                             if pane.history_index > 0 {
                                 pane.history_index -= 1;
                                 pane.input_buffer = pane.history[pane.history_index].clone();
+                                pane.cursor_pos = pane.input_buffer.len();
                             }
                         }
                         KeyCode::Down if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -440,6 +554,7 @@ where
                             } else {
                                 pane.history_index = pane.history.len();
                                 pane.input_buffer.clear();
+                                pane.cursor_pos = 0;
                             }
                         }
                         KeyCode::Up => {
@@ -467,28 +582,42 @@ where
                             }
                         }
                         KeyCode::Enter => {
-                            let lang = {
-                                let p = app.current_pane_mut();
-                                p.active_language.clone()
-                            };
                             let input = {
                                 let p = app.current_pane_mut();
                                 p.input_buffer.clone()
                             };
-                            if let Some(cmd) = app.current_pane_mut().handle_input().await {
-                                if cmd == "exit" {
-                                    app.running = false;
-                                    return Ok(());
+                            if let Some((target_lang, cmd)) = parse_lang_command(&input, &app.config) {
+                                let state = app.state.clone();
+                                let ws = &mut app.workspaces[app.active_workspace];
+                                let idx = ws.ensure_pane(&target_lang, &app.config, state);
+                                ws.active_pane = idx;
+                                app.current_pane_mut().input_buffer = cmd.clone();
+                                app.current_pane_mut().handle_input().await;
+                                app.record_command(&target_lang, &cmd, &[]);
+                            } else {
+                                let lang = {
+                                    let p = app.current_pane_mut();
+                                    p.active_language.clone()
+                                };
+                                if let Some(cmd) = app.current_pane_mut().handle_input().await {
+                                    if cmd == "exit" {
+                                        app.running = false;
+                                        return Ok(());
+                                    }
                                 }
+                                let output = {
+                                    let p = app.current_pane_mut();
+                                    p.output_lines.clone()
+                                };
+                                app.record_command(&lang, &input, &output);
                             }
-                            let output = {
-                                let p = app.current_pane_mut();
-                                p.output_lines.clone()
-                            };
-                            app.record_command(&lang, &input, &output);
                         }
                         KeyCode::Backspace => {
-                            app.current_pane_mut().input_buffer.pop();
+                            let pane = app.current_pane_mut();
+                            if pane.cursor_pos > 0 {
+                                pane.input_buffer.remove(pane.cursor_pos - 1);
+                                pane.cursor_pos -= 1;
+                            }
                         }
                         KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::CONTROL) && key.modifiers.contains(KeyModifiers::SHIFT) => match c {
                             'W' => app.remove_workspace(),
@@ -506,7 +635,9 @@ where
                             _ => {}
                         },
                         KeyCode::Char(c) => {
-                            app.current_pane_mut().input_buffer.push(c);
+                            let pane = app.current_pane_mut();
+                            pane.input_buffer.insert(pane.cursor_pos, c);
+                            pane.cursor_pos += 1;
                         }
                         _ => {}
                     }

@@ -1,0 +1,12 @@
+# Test cross-language variable sharing
+# Define a variable in Python
+py x = 42
+py name = "world"
+# Should be accessible in JavaScript (via bridge injection)
+js console.log("JS sees x =", typeof x !== 'undefined' ? x : 'UNDEFINED')
+js console.log("JS sees name =", typeof name !== 'undefined' ? name : 'UNDEFINED')
+# Define a var in JS, should flow back to Python
+js y = 99
+js greeting = "hello from js"
+py print("Python sees y =", y if 'y' in dir() else 'UNDEFINED')
+py print("Python sees greeting =", greeting if 'greeting' in dir() else 'UNDEFINED')

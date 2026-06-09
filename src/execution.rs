@@ -1,8 +1,15 @@
+use std::path::PathBuf;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
 use crate::config::LanguageConfig;
+
+fn state_file_path() -> PathBuf {
+    let mut path = std::env::temp_dir();
+    path.push("nooshell_state.json");
+    path
+}
 
 pub struct ProcessSession {
     pub process: Child,
@@ -16,6 +23,7 @@ impl ProcessSession {
     ) -> std::io::Result<Self> {
         let mut cmd = Command::new(&config.cmd);
         cmd.args(&config.args)
+            .env("NOO_STATE_FILE", state_file_path().to_string_lossy().to_string())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
