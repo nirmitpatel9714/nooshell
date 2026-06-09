@@ -50,8 +50,39 @@ Edit `languages.json` to add or change language REPLs:
 }
 ```
 
-## Build
+## Installation
+
+### Prerequisites
+
+- [Rust](https://rustup.rs/) (1.85+)
+
+### PowerShell (Windows)
+
+```powershell
+.\scripts\windows\install.ps1
+```
+
+This builds the binary, copies it to `~\.noo\bin`, and adds that directory to your user `PATH`. Restart your terminal and `noo` is available globally.
+
+### Bash (Git Bash / WSL / Linux / macOS)
+
+```sh
+chmod +x scripts/unix/install.sh
+./scripts/unix/install.sh
+```
+
+This builds the binary, copies it to `~/.noo/bin`, and adds it to your shell's PATH in `.bashrc` / `.zshrc`.
+
+### Uninstall
+
+| Platform | Command |
+|----------|---------|
+| Windows  | `.\scripts\windows\uninstall.ps1` |
+| Unix     | `./scripts/unix/uninstall.sh` |
+
+### Build manually
 
 ```sh
 cargo build --release
+# Binary is at target/release/noo.exe (Windows) or target/release/noo (Unix)
 ```
