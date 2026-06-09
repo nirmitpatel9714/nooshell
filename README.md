@@ -8,9 +8,9 @@ A multi-language REPL notebook and shell. Run interactive REPL sessions for mult
 - **CLI mode** (`noo`) — single-pane REPL with bash-like arrow-key history navigation
 - **Multi-language** — Python, JavaScript (Node.js), configurable via `languages.json`
 - **Workspaces** — horizontal tabs, each with its own set of vertically stacked notebook cells
-- **Cell management** — add (`Ctrl+T`), remove (`Ctrl+W`), reorder (`Shift+Up`/`Shift+Down`)
+- **Cell management** — add (`Alt+T`), remove (`Alt+W`), reorder (`Shift+Up`/`Shift+Down`)
 - **Command history** — persists across sessions to `%APPDATA%\nooshell\history.json`
-- **Session management** — save/restore workspace state; manage from TUI (`Ctrl+M`) or CLI
+- **Session management** — save/restore workspace state; manage from TUI (`Alt+M`) or CLI
 
 ## Usage
 
@@ -31,12 +31,12 @@ noo delses <id>     Delete a session
 | `Left` / `Right` | Switch workspace |
 | `Up` / `Down` | Navigate cells |
 | `Shift+Up` / `Shift+Down` | Move cell |
-| `Ctrl+T` | New cell |
-| `Ctrl+W` | Remove cell |
-| `Ctrl+N` | New workspace |
-| `Ctrl+Up` / `Ctrl+Down` | History in cell |
+| `Alt+T` | New cell |
+| `Alt+W` | Remove cell |
+| `Alt+N` | New workspace |
+| `Alt+Up` / `Alt+Down` | History in cell |
 | `Enter` | Execute cell |
-| `Ctrl+M` | Management TUI |
+| `Alt+M` | Management TUI |
 | `Esc` | Exit |
 
 ## Configuration

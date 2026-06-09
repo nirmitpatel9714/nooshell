@@ -333,7 +333,7 @@ fn readline_with_history(prefix: &str, prompt: &str) -> io::Result<String> {
                                 cursor_pos -= 1;
                             }
                         }
-                        KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::CONTROL) && c == 'c' => {
+                        KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::ALT) && c == 'c' => {
                             writeln!(stdout, "^C")?;
                             stdout.flush()?;
                             disable_raw_mode()?;
@@ -419,7 +419,7 @@ where
                 }
                 tab_spans.push(ratatui::text::Span::raw("   "));
                 tab_spans.push(ratatui::text::Span::styled(
-                    "Ctrl+M manage",
+                    "Alt+M manage",
                     Style::default().fg(Color::DarkGray),
                 ));
                 let tab_line = ratatui::text::Line::from(tab_spans);
@@ -514,10 +514,10 @@ where
                             app.running = false;
                             return Ok(());
                         }
-                        KeyCode::Left if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        KeyCode::Left if key.modifiers.contains(KeyModifiers::ALT) => {
                             app.previous_workspace();
                         }
-                        KeyCode::Right if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        KeyCode::Right if key.modifiers.contains(KeyModifiers::ALT) => {
                             app.next_workspace();
                         }
                         KeyCode::Left => {
@@ -538,7 +538,7 @@ where
                         KeyCode::Down if key.modifiers.contains(KeyModifiers::SHIFT) => {
                             app.move_cell_down();
                         }
-                        KeyCode::Up if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        KeyCode::Up if key.modifiers.contains(KeyModifiers::ALT) => {
                             let pane = app.current_pane_mut();
                             if pane.history_index > 0 {
                                 pane.history_index -= 1;
@@ -546,7 +546,7 @@ where
                                 pane.cursor_pos = pane.input_buffer.len();
                             }
                         }
-                        KeyCode::Down if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        KeyCode::Down if key.modifiers.contains(KeyModifiers::ALT) => {
                             let pane = app.current_pane_mut();
                             if pane.history_index + 1 < pane.history.len() {
                                 pane.history_index += 1;
@@ -619,11 +619,11 @@ where
                                 pane.cursor_pos -= 1;
                             }
                         }
-                        KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::CONTROL) && key.modifiers.contains(KeyModifiers::SHIFT) => match c {
+                        KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::ALT) && key.modifiers.contains(KeyModifiers::SHIFT) => match c {
                             'W' => app.remove_workspace(),
                             _ => {}
                         },
-                        KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::CONTROL) => match c {
+                        KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::ALT) => match c {
                             't' => app.add_cell(),
                             'w' => app.remove_cell(),
                             'n' => app.add_workspace(),
