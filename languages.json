@@ -8,5 +8,10 @@
     "cmd": "node",
     "args": ["-i"],
     "mode": "repl"
+  },
+  "ps": {
+    "cmd": "powershell",
+    "args": ["-NoExit", "-Command", "-"],
+    "mode": "repl"
   }
 }

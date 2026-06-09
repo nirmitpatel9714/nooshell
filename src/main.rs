@@ -170,20 +170,6 @@ async fn run_cli(app: &mut App, startup: &[String]) -> Result<(), Box<dyn Error>
     }
 
     loop {
-        app.poll_all_panes();
-
-        {
-            let ws = &mut app.workspaces[app.active_workspace];
-            for pane in &mut ws.panes {
-                if !pane.output_lines.is_empty() {
-                    for line in &pane.output_lines {
-                        println!("{}", line);
-                    }
-                    pane.output_lines.clear();
-                }
-            }
-        }
-
         let current_dir = env::current_dir().unwrap_or_else(|_| env::temp_dir());
         let dir_name = current_dir.file_name().unwrap_or_default().to_string_lossy();
         let lang = {
@@ -192,7 +178,7 @@ async fn run_cli(app: &mut App, startup: &[String]) -> Result<(), Box<dyn Error>
         };
 
         let prompt = format!("\x1b[32;1m➜ \x1b[36;1m[{}]\x1b[0m \x1b[33m({})\x1b[0m \x1b[35m❯\x1b[0m ", dir_name, lang);
-        let input = readline_with_history("\n", &prompt)?;
+        let input = readline_with_history("\n", &prompt, app)?;
         let input = input.trim().to_string();
 
         if input.is_empty() {
@@ -270,6 +256,13 @@ async fn run_cli(app: &mut App, startup: &[String]) -> Result<(), Box<dyn Error>
                     run_manage_tui(app).await?;
                     continue;
                 }
+                lang if app.config.contains_key(lang) => {
+                    let state = app.state.clone();
+                    let ws = &mut app.workspaces[app.active_workspace];
+                    let idx = ws.ensure_pane(lang, &app.config, state);
+                    ws.active_pane = idx;
+                    continue;
+                }
                 _ => {}
             }
         }
@@ -301,7 +294,7 @@ async fn run_cli(app: &mut App, startup: &[String]) -> Result<(), Box<dyn Error>
     Ok(())
 }
 
-fn readline_with_history(prefix: &str, prompt: &str) -> io::Result<String> {
+fn readline_with_history(prefix: &str, prompt: &str, app: &mut App) -> io::Result<String> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
 
@@ -315,6 +308,30 @@ fn readline_with_history(prefix: &str, prompt: &str) -> io::Result<String> {
     stdout.flush()?;
 
     loop {
+        app.poll_all_panes();
+
+        let output_lines: Vec<String> = {
+            let ws = &mut app.workspaces[app.active_workspace];
+            let mut lines = Vec::new();
+            for pane in &mut ws.panes {
+                lines.append(&mut pane.output_lines);
+            }
+            lines
+        };
+
+        if !output_lines.is_empty() {
+            write!(stdout, "\r\x1b[2K")?;
+            for line in &output_lines {
+                writeln!(stdout, "{}", line)?;
+            }
+            let (before, after) = input.split_at(cursor_pos);
+            write!(stdout, "{}{}{}", prompt, before, after)?;
+            if after.len() > 0 {
+                write!(stdout, "\x1b[{}D", after.len())?;
+            }
+            stdout.flush()?;
+        }
+
         if event::poll(Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
@@ -670,6 +687,14 @@ where
                                 app.record_command(&target_lang, &cmd, &[]);
                                 app.auto_save();
                             } else {
+                                let input_parts: Vec<&str> = input.split_whitespace().collect();
+                                if input_parts.len() == 2 && input_parts[0] == "noo" && app.config.contains_key(input_parts[1]) {
+                                    let state = app.state.clone();
+                                    let ws = &mut app.workspaces[app.active_workspace];
+                                    let idx = ws.ensure_pane(input_parts[1], &app.config, state);
+                                    ws.active_pane = idx;
+                                    continue;
+                                }
                                 let lang = {
                                     let p = app.current_pane_mut();
                                     p.active_language.clone()
