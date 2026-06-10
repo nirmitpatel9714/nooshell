@@ -82,9 +82,9 @@ noo compile script.ns --windows Cross-compile for Windows
 ### Inline language switching (CLI + Notebook)
 
 ```
-py print("hello from python")
-js console.log("hello from javascript")
-ps Write-Host "hello from powershell"
+py (print("hello from python"))
+js (console.log("hello from javascript"))
+ps (Write-Host "hello from powershell")
 ```
 
 This dispatches to any language, creating a new pane if one doesn't exist.
