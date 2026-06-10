@@ -1,14 +1,8 @@
-mod app;
-mod bridge;
-mod config;
-mod execution;
-mod noorc;
-mod pane;
-mod script;
-mod state;
-mod store;
-
-use crate::app::App;
+use nooshell::app::App;
+use nooshell::config;
+use nooshell::noorc;
+use nooshell::script::NsScript;
+use nooshell::store;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
@@ -21,51 +15,55 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
     Terminal,
 };
-use std::{env, error::Error, io, io::Write, time::Duration};
+use std::{env, error::Error, io, io::Write, path::Path, time::Duration};
 use crossterm::event::KeyEventKind;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let config = config::load_config("languages.json").unwrap_or_default();
-    let noorc = noorc::Noorc::load();
     let args: Vec<String> = env::args().collect();
 
+    // noo compile <script.ns> [--windows | --linux | --mac]
+    if args.iter().any(|a| a == "compile") {
+        if let Some(pos) = args.iter().position(|a| a == "compile") {
+            if let Some(script_path) = args.get(pos + 1) {
+                let path = Path::new(script_path);
+                if !path.exists() {
+                    eprintln!("Script not found: {}", script_path);
+                    std::process::exit(1);
+                }
+                use nooshell::compile::Target;
+                let target = if args.contains(&"--windows".to_string()) {
+                    Target::Windows
+                } else if args.contains(&"--linux".to_string()) {
+                    Target::Linux
+                } else if args.contains(&"--mac".to_string()) {
+                    Target::Mac
+                } else {
+                    Target::Native
+                };
+                nooshell::compile::compile(path, target)?;
+                return Ok(());
+            } else {
+                eprintln!("Usage: noo compile <script.ns> [--windows | --linux | --mac]");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    let config = config::load_config("languages.json").unwrap_or_default();
+    let noorc = noorc::Noorc::load();
     let startup = noorc.startup.clone();
 
     if let Some(script_path) = args.iter().find(|a| a.ends_with(".ns")) {
-        use crate::script::NsScript;
-        if let Ok(script) = NsScript::load(script_path, &config) {
-            let mut app = App::new(config);
-            for (alias, code) in &script.lines {
-                let lang = alias.as_deref().unwrap_or("py");
-                let state = app.state.clone();
-                let idx;
-                {
-                    let ws = &mut app.workspaces[0];
-                    idx = ws.ensure_pane(lang, &app.config, state);
-                    ws.active_pane = idx;
-                }
-                for _ in 0..5 {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-                    app.poll_all_panes();
-                }
-                app.workspaces[0].panes[idx].output_lines.clear();
-                app.workspaces[0].panes[idx].input_buffer = code.clone();
-                app.workspaces[0].panes[idx].handle_input().await;
-                for _ in 0..20 {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-                    app.poll_all_panes();
-                    if !app.workspaces[0].panes[idx].output_lines.is_empty() {
-                        break;
-                    }
-                }
-                for line in &app.workspaces[0].panes[idx].output_lines {
-                    if !line.is_empty() {
-                        println!("{}", line);
-                    }
-                }
+        let content = match std::fs::read_to_string(script_path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("Failed to read script: {}", e);
+                std::process::exit(1);
             }
-        }
+        };
+        let lang_json = include_str!("../languages.json");
+        NsScript::run_embedded(&content, lang_json).await;
         return Ok(());
     }
 

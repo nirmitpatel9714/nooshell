@@ -17,3 +17,8 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> std::io::Result<ConfigMap> {
     let config: ConfigMap = serde_json::from_str(&content)?;
     Ok(config)
 }
+
+pub fn load_from_str(content: &str) -> std::io::Result<ConfigMap> {
+    let config: ConfigMap = serde_json::from_str(content)?;
+    Ok(config)
+}

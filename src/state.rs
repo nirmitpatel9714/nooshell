@@ -37,6 +37,11 @@ impl SharedState {
         }
     }
 
+    pub fn remove(&self, key: &str) {
+        let mut store = self.store.lock().unwrap();
+        store.remove(key);
+    }
+
     pub fn is_empty(&self) -> bool {
         let store = self.store.lock().unwrap();
         store.is_empty()

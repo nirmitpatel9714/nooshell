@@ -1,11 +1,15 @@
 [package]
 name = "nooshell"
-version = "1.4.1"
+version = "2.0.0"
 edition = "2024"
 
 [[bin]]
 name = "noo"
 path = "src/main.rs"
+
+[lib]
+name = "nooshell"
+path = "src/lib.rs"
 
 [dependencies]
 crossterm = "0.29.0"
