@@ -93,7 +93,8 @@ This dispatches to any language, creating a new pane if one doesn't exist.
 
 ```
 py  x = 42
-js  console.log(x)   # prints 42
+js  console.log(x)  
+# prints 42
 ```
 
 Variables set in one language are automatically injected into others via the
