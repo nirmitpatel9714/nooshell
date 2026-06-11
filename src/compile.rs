@@ -127,11 +127,16 @@ pub fn compile(script_path: &Path, target: Target) -> io::Result<()> {
     let src_dir = build_root.join("src");
     fs::create_dir_all(&src_dir)?;
 
-    let lang_path = out_dir.join("languages.json");
+    let lang_path = out_dir.join("config").join("languages.json");
     let lang_path = if lang_path.exists() {
         clean_path(&fs::canonicalize(&lang_path)?)
     } else {
-        noo_root.join("languages.json")
+        let old = out_dir.join("languages.json");
+        if old.exists() {
+            clean_path(&fs::canonicalize(&old)?)
+        } else {
+            noo_root.join("config").join("languages.json")
+        }
     };
 
     let noo_path_esc = noo_root.to_string_lossy().replace('\\', "\\\\");

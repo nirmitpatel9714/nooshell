@@ -10,7 +10,9 @@
 use nooshell::app::App;
 use nooshell::config;
 use nooshell::noorc;
+use nooshell::passthrough;
 use nooshell::script::NsScript;
+use nooshell::shell_resolver;
 use nooshell::store;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
@@ -59,7 +61,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let config = config::load_config("languages.json").unwrap_or_default();
+    let lang_json_embedded = include_str!("../config/languages.json");
+    let config = config::load_language_config(lang_json_embedded);
     let noorc = noorc::Noorc::load();
     let startup = noorc.startup.clone();
 
@@ -71,8 +74,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 std::process::exit(1);
             }
         };
-        let lang_json = include_str!("../languages.json");
-        NsScript::run_embedded(&content, lang_json).await;
+        NsScript::run_embedded(&content, lang_json_embedded).await;
         return Ok(());
     }
 
@@ -140,6 +142,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     } else if args.iter().any(|a| a == "manage") {
         let mut app = App::new(config);
         run_manage_tui(&mut app).await?;
+    } else if let Some(pos) = args.iter().position(|a| a == "pass") {
+        let shell_name = args.get(pos + 1).cloned().unwrap_or_default();
+        if shell_name.is_empty() {
+            let supported = shell_resolver::list_supported_shells().join(", ");
+            eprintln!("Usage: noo pass <shell>");
+            eprintln!("Supported shells: {}", supported);
+            std::process::exit(1);
+        }
+        let cfg = passthrough::PassThroughConfig {
+            shell_name,
+            ..Default::default()
+        };
+        if let Err(e) = passthrough::run_passthrough(&cfg) {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
     } else {
         let mut app = App::with_noorc(config, noorc.language.as_deref(), noorc.aliases);
         run_cli(&mut app, &startup).await?;
@@ -216,15 +234,18 @@ async fn run_cli(app: &mut App, startup: &[String]) -> Result<(), Box<dyn Error>
         if parts.first() == Some(&"noo") && parts.len() > 1 {
             match parts[1] {
                 "nbmode" => {
+                    app.record_command(&lang, &input, &[]);
                     run_tui(app).await?;
                     break;
                 }
                 "clearc" => {
+                    app.record_command(&lang, &input, &[]);
                     store::clear_history();
                     println!("\x1b[33mCommand history cleared.\x1b[0m");
                     continue;
                 }
                 "delses" => {
+                    app.record_command(&lang, &input, &[]);
                     if let Some(id) = parts.get(2) {
                         if store::delete_session(id) {
                             println!("\x1b[33mSession '{}' deleted.\x1b[0m", id);
@@ -259,11 +280,34 @@ async fn run_cli(app: &mut App, startup: &[String]) -> Result<(), Box<dyn Error>
                     }
                     continue;
                 }
+                "pass" => {
+                    let shell_name = parts.get(2).map(|s| s.to_string()).unwrap_or_default();
+                    if shell_name.is_empty() {
+                        let supported = shell_resolver::list_supported_shells().join(", ");
+                        println!("\x1b[33mUsage: noo pass <shell>\x1b[0m");
+                        println!("\x1b[33mSupported shells: {}\x1b[0m", supported);
+                        continue;
+                    }
+                    app.record_command(&lang, &input, &[]);
+                    let cfg = passthrough::PassThroughConfig {
+                        shell_name,
+                        ..Default::default()
+                    };
+                    match passthrough::run_passthrough(&cfg) {
+                        Ok(()) => {}
+                        Err(e) => {
+                            eprintln!("\x1b[31mError: {}\x1b[0m", e);
+                        }
+                    }
+                    continue;
+                }
                 "manage" => {
+                    app.record_command(&lang, &input, &[]);
                     run_manage_tui(app).await?;
                     continue;
                 }
                 lang if app.config.contains_key(lang) => {
+                    app.record_command(&lang, &input, &[]);
                     let state = app.state.clone();
                     let ws = &mut app.workspaces[app.active_workspace];
                     let idx = ws.ensure_pane(lang, &app.config, state);
