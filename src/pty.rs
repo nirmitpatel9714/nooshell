@@ -78,6 +78,7 @@ pub fn create_pty_session(
     shell_args: &[String],
     cols: u16,
     rows: u16,
+    cwd: Option<&str>,
 ) -> Result<PtySession, Box<dyn std::error::Error>> {
     let pty_system = native_pty_system();
     let pair = pty_system.openpty(PtySize {
@@ -89,6 +90,9 @@ pub fn create_pty_session(
 
     let mut cmd = CommandBuilder::new(shell_path);
     cmd.args(shell_args);
+    if let Some(cwd) = cwd {
+        cmd.cwd(cwd);
+    }
     let child = pair.slave.spawn_command(cmd)?;
 
     Ok(PtySession {

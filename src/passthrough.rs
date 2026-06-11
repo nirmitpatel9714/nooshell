@@ -49,6 +49,7 @@ pub fn run_passthrough(config: &PassThroughConfig) -> Result<(), Box<dyn std::er
         &shell.args,
         cols,
         rows,
+        config.cwd.as_deref(),
     )?;
 
     let reader = session.try_clone_reader()?;

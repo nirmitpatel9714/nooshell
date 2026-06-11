@@ -144,14 +144,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
         run_manage_tui(&mut app).await?;
     } else if let Some(pos) = args.iter().position(|a| a == "pass") {
         let shell_name = args.get(pos + 1).cloned().unwrap_or_default();
-        if shell_name.is_empty() {
-            let supported = shell_resolver::list_supported_shells().join(", ");
-            eprintln!("Usage: noo pass <shell>");
-            eprintln!("Supported shells: {}", supported);
-            std::process::exit(1);
-        }
+        let shell_name = if shell_name.is_empty() {
+            shell_resolver::detect_default_shell()
+                .unwrap_or_else(|| {
+                    eprintln!("No default shell found. Supported shells: {}",
+                        shell_resolver::list_supported_shells().join(", "));
+                    std::process::exit(1);
+                })
+        } else {
+            shell_name
+        };
+        let cwd = std::env::current_dir()
+            .ok()
+            .map(|p| p.to_string_lossy().to_string());
         let cfg = passthrough::PassThroughConfig {
             shell_name,
+            cwd,
             ..Default::default()
         };
         if let Err(e) = passthrough::run_passthrough(&cfg) {
@@ -282,15 +290,25 @@ async fn run_cli(app: &mut App, startup: &[String]) -> Result<(), Box<dyn Error>
                 }
                 "pass" => {
                     let shell_name = parts.get(2).map(|s| s.to_string()).unwrap_or_default();
-                    if shell_name.is_empty() {
-                        let supported = shell_resolver::list_supported_shells().join(", ");
-                        println!("\x1b[33mUsage: noo pass <shell>\x1b[0m");
-                        println!("\x1b[33mSupported shells: {}\x1b[0m", supported);
-                        continue;
-                    }
+                    let shell_name = if shell_name.is_empty() {
+                        match shell_resolver::detect_default_shell() {
+                            Some(s) => s,
+                            None => {
+                                let supported = shell_resolver::list_supported_shells().join(", ");
+                                println!("\x1b[33mNo default shell found. Supported shells: {}\x1b[0m", supported);
+                                continue;
+                            }
+                        }
+                    } else {
+                        shell_name
+                    };
                     app.record_command(&lang, &input, &[]);
+                    let cwd = std::env::current_dir()
+                        .ok()
+                        .map(|p| p.to_string_lossy().to_string());
                     let cfg = passthrough::PassThroughConfig {
                         shell_name,
+                        cwd,
                         ..Default::default()
                     };
                     match passthrough::run_passthrough(&cfg) {

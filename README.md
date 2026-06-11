@@ -15,6 +15,8 @@ and cross-language variable sharing.
   native binaries (supports cross-compilation for Windows, Linux, macOS)
 - **Multi-language** — Python, JavaScript (Node.js), PowerShell, bash, and any language
   configurable via `languages.json`
+- **Passthrough terminal** (`noo pass`) — full PTY-backed shell session for
+  interactive programs (vim, htop, etc.)
 - **Cross-language variable sharing** — variables defined in one language are
   automatically available in other REPLs via the state bridge
 - **Workspaces** — horizontal tabs, each with its own set of vertically stacked cells
@@ -73,6 +75,9 @@ noo sessions                 List saved sessions
 noo clearc                   Clear command history
 noo delses <id>              Delete a saved session
 noo script.ns                Run a .ns script
+noo pass                     Passthrough terminal mode (default shell)
+noo pass bash                Passthrough to bash
+noo pass ps                  Passthrough to PowerShell
 noo compile script.ns        Compile script to native binary
 noo compile script.ns --linux  Cross-compile for Linux
 noo compile script.ns --mac    Cross-compile for macOS
@@ -161,9 +166,21 @@ docs/
 ├── architecture.md    High-level architecture and threading model
 ├── configuration.md   languages.json and noorc format reference
 ├── keybindings.md     Full keybinding reference
+├── passthrough.md     PTY passthrough mode, shell resolution, terminal bridge
+├── persistence.md     Command history & session persistence data model
 ├── scripting.md       .ns scripting guide
 └── state-bridge.md    Deep dive on cross-language variable sharing
 ```
+
+## Passthrough
+
+See [docs/passthrough.md](docs/passthrough.md) for the PTY-backed passthrough
+terminal mode, shell resolution, and configuration.
+
+## Persistence
+
+See [docs/persistence.md](docs/persistence.md) for command history and session
+persistence data model, autosave, and management commands.
 
 ## Configuration
 

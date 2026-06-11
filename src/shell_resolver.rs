@@ -52,6 +52,34 @@ pub fn resolve_shell(name: &str) -> Option<ResolvedShell> {
     None
 }
 
+/// Detect a default shell available on the system.
+/// On Windows, tries `ps` (PowerShell) first, then `bash`.
+/// On Unix, checks `$SHELL`, then tries `bash`.
+pub fn detect_default_shell() -> Option<String> {
+    #[cfg(windows)]
+    let candidates = ["ps", "bash"];
+    #[cfg(not(windows))]
+    let candidates = {
+        let shell_var = std::env::var("SHELL").ok()?;
+        // If $SHELL is set, try to match it to a known alias
+        let path = std::path::Path::new(&shell_var);
+        let name = path.file_stem()?.to_str()?;
+        return if resolve_shell(name).is_some() {
+            Some(name.to_string())
+        } else {
+            None
+        };
+    };
+
+    #[allow(unused)]
+    for name in &candidates {
+        if resolve_shell(name).is_some() {
+            return Some(name.to_string());
+        }
+    }
+    None
+}
+
 pub fn list_supported_shells() -> Vec<String> {
     let cfg = load_config();
     let mut shells: Vec<String> = cfg.into_keys().collect();
