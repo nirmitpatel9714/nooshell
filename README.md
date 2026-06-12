@@ -36,7 +36,7 @@ and cross-language variable sharing.
 ### Windows (PowerShell)
 
 ```powershell
-.\scripts\windows\install.ps1
+.\scripts\install scripts\windows\install.ps1
 ```
 
 Builds the binary, copies it to `~\.noo\bin`, and adds that directory to your user `PATH`.
@@ -45,8 +45,8 @@ Restart your terminal and `noo` is available globally.
 ### Unix (Git Bash / WSL / Linux / macOS)
 
 ```sh
-chmod +x scripts/unix/install.sh
-./scripts/unix/install.sh
+chmod +x "scripts/install scripts/unix/install.sh"
+./scripts/install scripts/unix/install.sh
 ```
 
 Builds the binary, copies it to `~/.noo/bin`, and adds it to your shell's `PATH`
@@ -63,8 +63,8 @@ cargo build --release
 
 | Platform | Command |
 |----------|---------|
-| Windows  | `.\scripts\windows\uninstall.ps1` |
-| Unix     | `./scripts/unix/uninstall.sh` |
+| Windows  | `.\scripts\install scripts\windows\uninstall.ps1` |
+| Unix     | `./scripts/install scripts/unix/uninstall.sh` |
 
 ## Usage
 
