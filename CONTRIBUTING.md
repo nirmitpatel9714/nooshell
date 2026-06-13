@@ -35,12 +35,8 @@ Small, focused proposals are easier to discuss and implement.
    ```sh
    cargo clippy
    ```
-6. Verify the test script works:
-   ```sh
-   cargo run -- test.ns
-   ```
-7. Commit with a clear, concise message describing *what* and *why*.
-8. Push and open a pull request.
+6. Commit with a clear, concise message describing *what* and *why*.
+7. Push and open a pull request.
 
 ## Development setup
 
@@ -57,12 +53,6 @@ No system libraries are required.
 
 ```sh
 cargo run -- nbmode
-```
-
-### Running the test script
-
-```sh
-cargo run -- test.ns
 ```
 
 Some tests in `src/bridge.rs` require Python 3 and Node.js on your `PATH`.
@@ -88,7 +78,6 @@ Some tests in `src/bridge.rs` require Python 3 and Node.js on your `PATH`.
 | `src/` | Rust source code (library + binary) |
 | `docs/` | Markdown documentation |
 | `scripts/` | Install/uninstall scripts (Windows + Unix) |
-| `test.ns` | Integration test script |
 
 See [docs/architecture.md](docs/architecture.md) for a full component overview.
 

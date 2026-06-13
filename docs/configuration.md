@@ -2,7 +2,7 @@
 
 ## `languages.json`
 
-Defines the REPL commands for each language. Located in the project root (or working directory).
+Defines the REPL commands for each language. Built into the binary from `config/languages.json`. Override by placing a `languages.json` at `$HOME/.config/noo/languages.json` (Unix) or `%USERPROFILE%\.config\noo\languages.json` (Windows).
 
 ```json
 {
@@ -30,7 +30,7 @@ Defines the REPL commands for each language. Located in the project root (or wor
 | ---      | ---             | ---                                          |
 | `cmd`    | string          | The executable to run                        |
 | `args`   | array of string | Arguments passed to the executable           |
-| `mode`   | string          | Currently always `"repl"` (future: compile)  |
+| `mode`   | string          | Currently always `"repl"`  |
 | `lsp`    | object (optional) | LSP server config for syntax highlighting  |
 
 ### LSP config (`lsp` field)
@@ -75,7 +75,7 @@ This enables C++ syntax highlighting via `clangd` (requires `clangd` on PATH). T
 
 ## `noorc`
 
-A startup config file at `%APPDATA%/NooBook/noorc` (Windows) or `$HOME/.config/NooBook/noorc` (Unix).
+A startup config file at `%APPDATA%/NooBook/noorc` (Windows) or `$HOME/NooBook/noorc` (Unix).
 
 ### Syntax
 

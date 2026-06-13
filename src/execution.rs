@@ -6,7 +6,6 @@ use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
 
 /// Temp file path set as `NOO_STATE_FILE` on every REPL subprocess.
-/// Currently reserved for future use by language-specific state dump scripts.
 fn state_file_path() -> PathBuf {
     let mut path = std::env::temp_dir();
     path.push("noobook_state.json");

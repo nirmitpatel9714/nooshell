@@ -7,7 +7,7 @@ NooBook persists two kinds of data to disk: **command history** and **workspace 
 | Platform | Path |
 | --- | --- |
 | Windows | `%APPDATA%\NooBook\` |
-| Unix    | `~/.local/share/NooBook/` (falls back to `$HOME/NooBook/`) |
+| Unix    | `$HOME/NooBook/` |
 
 Set `APPDATA` (Windows) or `HOME` (Unix) to override.
 

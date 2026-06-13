@@ -13,22 +13,16 @@
 //! - [`store`] — Command history and session persistence
 //! - [`config`] — Language configuration loading
 //! - [`noorc`] — Startup config file parser
-//! - [`script`] — `.ns` script parser and runner
-//! - [`compile`] — Script-to-native-binary compiler
+//! - [`highlight`] — Syntax highlighting
+//! - [`lsp`] — LSP client for semantic tokens
 
 pub mod app;
 pub mod bridge;
-pub mod compile;
 pub mod config;
 pub mod execution;
 pub mod highlight;
 pub mod lsp;
 pub mod noorc;
 pub mod pane;
-pub mod passthrough;
-pub mod pty;
-pub mod script;
-pub mod shell_resolver;
 pub mod state;
 pub mod store;
-pub mod terminal_bridge;

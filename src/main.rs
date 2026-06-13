@@ -4,8 +4,6 @@
 //! - **CLI mode** (`noo`) — single-pane REPL with history
 //! - **Notebook TUI** (`noo nbmode`) — multi-workspace tabbed notebook
 //! - **Management TUI** (`noo manage`) — session & history management
-//! - **Script mode** (`noo <script.ns>`) — batch script execution
-//! - **Compile mode** (`noo compile <script.ns>`) — compile to native binary
 
 use crossterm::event::KeyEventKind;
 use crossterm::{
@@ -17,9 +15,6 @@ use noobook::app::App;
 use noobook::config;
 use noobook::highlight;
 use noobook::noorc;
-use noobook::passthrough;
-use noobook::script::NsScript;
-use noobook::shell_resolver;
 use noobook::store;
 use ratatui::{
     Terminal,
@@ -28,56 +23,16 @@ use ratatui::{
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
-use std::{env, error::Error, io, io::Write, path::Path, time::Duration};
+use std::{env, error::Error, io, io::Write, time::Duration};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
 
-    // noo compile <script.ns> [--windows | --linux | --mac]
-    if args.iter().any(|a| a == "compile")
-        && let Some(pos) = args.iter().position(|a| a == "compile")
-    {
-        if let Some(script_path) = args.get(pos + 1) {
-            let path = Path::new(script_path);
-            if !path.exists() {
-                eprintln!("Script not found: {}", script_path);
-                std::process::exit(1);
-            }
-            use noobook::compile::Target;
-            let target = if args.contains(&"--windows".to_string()) {
-                Target::Windows
-            } else if args.contains(&"--linux".to_string()) {
-                Target::Linux
-            } else if args.contains(&"--mac".to_string()) {
-                Target::Mac
-            } else {
-                Target::Native
-            };
-            noobook::compile::compile(path, target)?;
-            return Ok(());
-        } else {
-            eprintln!("Usage: noo compile <script.ns> [--windows | --linux | --mac]");
-            std::process::exit(1);
-        }
-    }
-
     let lang_json_embedded = include_str!("../config/languages.json");
     let config = config::load_language_config(lang_json_embedded);
     let noorc = noorc::Noorc::load();
     let startup = noorc.startup.clone();
-
-    if let Some(script_path) = args.iter().find(|a| a.ends_with(".ns")) {
-        let content = match std::fs::read_to_string(script_path) {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("Failed to read script: {}", e);
-                std::process::exit(1);
-            }
-        };
-        NsScript::run_embedded(&content, lang_json_embedded).await;
-        return Ok(());
-    }
 
     if args.iter().any(|a| a == "clearc") {
         store::clear_history();
@@ -126,31 +81,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     } else if args.iter().any(|a| a == "manage") {
         let mut app = App::new(config);
         run_manage_tui(&mut app).await?;
-    } else if let Some(pos) = args.iter().position(|a| a == "pass") {
-        let shell_name = args.get(pos + 1).cloned().unwrap_or_default();
-        let shell_name = if shell_name.is_empty() {
-            shell_resolver::detect_default_shell().unwrap_or_else(|| {
-                eprintln!(
-                    "No default shell found. Supported shells: {}",
-                    shell_resolver::list_supported_shells().join(", ")
-                );
-                std::process::exit(1);
-            })
-        } else {
-            shell_name
-        };
-        let cwd = std::env::current_dir()
-            .ok()
-            .map(|p| p.to_string_lossy().to_string());
-        let cfg = passthrough::PassThroughConfig {
-            shell_name,
-            cwd,
-            ..Default::default()
-        };
-        if let Err(e) = passthrough::run_passthrough(&cfg) {
-            eprintln!("Error: {}", e);
-            std::process::exit(1);
-        }
     } else if args.iter().any(|a| a == "cli") {
         let mut app = App::with_noorc(config, noorc.language.as_deref(), noorc.aliases);
         run_cli(&mut app, &startup).await?;
@@ -323,40 +253,6 @@ async fn run_cli(app: &mut App, startup: &[String]) -> Result<(), Box<dyn Error>
                                 s.workspaces.len(),
                                 cell_total
                             );
-                        }
-                    }
-                    continue;
-                }
-                "pass" => {
-                    let shell_name = parts.get(2).map(|s| s.to_string()).unwrap_or_default();
-                    let shell_name = if shell_name.is_empty() {
-                        match shell_resolver::detect_default_shell() {
-                            Some(s) => s,
-                            None => {
-                                let supported = shell_resolver::list_supported_shells().join(", ");
-                                println!(
-                                    "\x1b[33mNo default shell found. Supported shells: {}\x1b[0m",
-                                    supported
-                                );
-                                continue;
-                            }
-                        }
-                    } else {
-                        shell_name
-                    };
-                    app.record_command(&lang, &input, &[]);
-                    let cwd = std::env::current_dir()
-                        .ok()
-                        .map(|p| p.to_string_lossy().to_string());
-                    let cfg = passthrough::PassThroughConfig {
-                        shell_name,
-                        cwd,
-                        ..Default::default()
-                    };
-                    match passthrough::run_passthrough(&cfg) {
-                        Ok(()) => {}
-                        Err(e) => {
-                            eprintln!("\x1b[31mError: {}\x1b[0m", e);
                         }
                     }
                     continue;

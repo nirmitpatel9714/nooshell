@@ -9,8 +9,7 @@ NooBook is a multi-language REPL terminal notebook built in Rust with `ratatui` 
 │  main.rs                                            │
 │  ───────                                            │
 │  Parses CLI args, loads config & noorc, dispatches  │
-│  to CLI mode, Notebook TUI, Management TUI, or      │
-│  script execution.                                  │
+│  to CLI mode, Notebook TUI, or Management TUI.       │
 └──────────┬──────────────────────────────────────────┘
            │
      ┌─────┴─────────────────────┐
@@ -39,12 +38,13 @@ NooBook is a multi-language REPL terminal notebook built in Rust with `ratatui` 
      │  SharedState              │
      └─────┬─────────────────────┘
            │
-     ┌─────┴─────────────────────┐
-     │  ProcessSession (exec.rs) │
-     │  ──────────────────────   │
-     │  Child process (REPL)     │
-     │  mpsc channels for I/O    │
-     └───────────────────────────┘
+      ┌─────┴─────────────────────┐
+      │  ProcessSession           │
+      │  (execution.rs)           │
+      │  ──────────────           │
+      │  Child process (REPL)     │
+      │  mpsc channels for I/O    │
+      └───────────────────────────┘
 ```
 
 ## Core components
@@ -93,19 +93,16 @@ Full-screen terminal UI with:
 ### Management TUI (`noo manage`)
 TUI for viewing and managing saved sessions and command history.
 
-### Script mode (`noo script.ns`)
-Batch execution of `.ns` script files with cross-language variable sharing.
-
 ## Data persistence
 
 ### Command history
-Stored at `%APPDATA%/NooBook/history.json` (Windows) or `~/.local/share/NooBook/history.json` (Unix). Each command is recorded with a language tag, timestamp, and output preview.
+Stored at `%APPDATA%/NooBook/history.json` (Windows) or `$HOME/NooBook/history.json` (Unix). Each command is recorded with a language tag, timestamp, and output preview.
 
 ### Session persistence
 Stored at `%APPDATA%/NooBook/sessions.json`. Full workspace state (cells, history, outputs, cursor positions) is serialized. Sessions can be saved/restored from the Management TUI. An `_autosave` session is saved every 10 seconds during notebook mode and offered for restoration on startup.
 
 ### Noorc — `src/noorc.rs`
-A config file at `%APPDATA%/NooBook/noorc` (Windows) or `~/.config/NooBook/noorc` (Unix) that sets:
+A config file at `%APPDATA%/NooBook/noorc` (Windows) or `$HOME/NooBook/noorc` (Unix) that sets:
 - Default language
 - Command aliases
 - Startup commands (run on boot)
