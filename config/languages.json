@@ -14,6 +14,11 @@
     "args": ["-NoLogo", "-NoExit", "-Command", "-"],
     "mode": "repl"
   },
+  "bash": {
+    "cmd": "bash",
+    "args": [],
+    "mode": "repl"
+  },
   "cpp": {
     "cmd": "echo",
     "args": ["C++ REPL is not available; use clangd for highlighting"],
