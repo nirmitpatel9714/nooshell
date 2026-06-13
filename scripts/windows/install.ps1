@@ -1,4 +1,4 @@
-$ProjectRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath)))
+$ProjectRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
 $BinDir = "$env:USERPROFILE\.noo\bin"
 $Binary = "$BinDir\noo.exe"
 

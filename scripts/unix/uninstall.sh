@@ -21,7 +21,6 @@ for RC_FILE in "${HOME}/.zshrc" "${HOME}/.bashrc" "${HOME}/.profile"; do
   if [ -f "${RC_FILE}" ]; then
     tmp=$(mktemp)
     grep -v "export PATH=\"${BIN_DIR}:\$PATH\"" "${RC_FILE}" > "${tmp}" 2>/dev/null || true
-    grep -v "export PATH=\"${BIN_DIR}:\$PATH\"" "${RC_FILE}" > "${tmp}" 2>/dev/null || true
     mv "${tmp}" "${RC_FILE}"
   fi
 done
