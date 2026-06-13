@@ -6,9 +6,8 @@ and cross-language variable sharing.
 
 ## Features
 
-- **Notebook mode** (`noo nbmode`) — full TUI with multiple workspace tabs, each
+- **Notebook ** (`noo`) — full TUI with multiple workspace tabs, each
   containing vertically stacked notebook cells with independent REPL sessions
-- **CLI mode** (`noo`) — single-pane REPL with bash-like arrow-key history navigation
 - **Management TUI** (`noo manage`) — view and manage saved sessions and command history
 - **Multi-language** — Python, JavaScript (Node.js), PowerShell, bash, and any language
   configurable via `languages.json`
