@@ -97,7 +97,6 @@ From within CLI mode, prefix with `noo`:
 
 | Command | Action |
 | --- | --- |
-| `noo nbmode` | Switch to notebook TUI |
 | `noo manage` | Open Management TUI |
 | `noo history` | Show command history |
 | `noo sessions` | List saved sessions |
